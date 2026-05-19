@@ -317,6 +317,27 @@ async def open_server_tab():
 
         await wait_for(2, 3)
 
+        # 关闭广告弹窗（如有）
+        try:
+            close_btn = page.locator('text=Close').first
+            if await close_btn.is_visible(timeout=3000):
+                await close_btn.click()
+                std_logger.info("✅ 已关闭广告弹窗")
+                await asyncio.sleep(1)
+        except Exception:
+            pass
+        # 兼容其他弹窗关闭按钮写法
+        for close_sel in ['button:has-text("Close")', '[aria-label="Close"]', '.modal-close', '.close']:
+            try:
+                btn = page.locator(close_sel).first
+                if await btn.is_visible(timeout=1000):
+                    await btn.click()
+                    std_logger.info(f"✅ 已关闭弹窗（选择器: {close_sel}）")
+                    await asyncio.sleep(1)
+                    break
+            except Exception:
+                pass
+
         # 点击续期前，记录当前剩余时间并截图
         before_time = ""
         try:
