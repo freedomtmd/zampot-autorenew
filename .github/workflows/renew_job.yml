@@ -85,14 +85,15 @@ jobs:
       - name: 安装依赖 
         run: pip install -r requirements.txt 
 
-      - name: 运行续期脚本 
-        env: 
-          ZAMPTO_USER: ${{ secrets.ZAMPTO_USERNAME }} 
-          PASSWORD: ${{ secrets.ZAMPTO_PASSWORD }} 
-          SERVER_IDS: ${{ secrets.SERVER_IDS }} 
-          TG_TOKEN: ${{ secrets.TG_TOKEN }} 
-          TG_USERID: ${{ secrets.TG_USERID }} 
-          CHROME_PROXY: "socks5://127.0.0.1:10808" 
+      - name: 运行续期脚本
+        env:
+          ZAMPTO_USER: ${{ secrets.ZAMPTO_USERNAME }}
+          PASSWORD: ${{ secrets.ZAMPTO_PASSWORD }}
+          SERVER_IDS: ${{ secrets.SERVER_IDS }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_USERID: ${{ secrets.TG_USERID }}
+          CHROME_PROXY: "socks5://127.0.0.1:10808"
+          ALL_PROXY: "socks5://127.0.0.1:10808"
         run: python zampto_server.py -r 3 
 
       - name: 上传截图（调试用） 
