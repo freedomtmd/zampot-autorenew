@@ -87,7 +87,7 @@ jobs:
 
       - name: 运行续期脚本
         env:
-          USERNAME: ${{ secrets.ZAMPTO_USERNAME }}
+          ZAMPTO_USER: ${{ secrets.ZAMPTO_USERNAME }}
           PASSWORD: ${{ secrets.ZAMPTO_PASSWORD }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_USERID: ${{ secrets.TG_USERID }}
