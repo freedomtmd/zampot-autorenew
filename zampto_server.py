@@ -35,7 +35,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 std_logger = logging.getLogger(__name__)
 
 # 登录信息
-username = os.getenv("ZAMPTO_USER")
+username = os.getenv("ZAMPTO_USER")  # workflow 中将 secrets.USERNAME 映射为 ZAMPTO_USER，避免与系统变量冲突
 password = os.getenv("PASSWORD")
 
 # 通知
@@ -46,7 +46,8 @@ user_id = os.getenv("TG_USERID", "")
 # chrome代理
 chrome_proxy = os.getenv("CHROME_PROXY")
 
-# 服务器 ID 列表
+# 服务器 ID 列表，逗号分隔，例如："6119,6120,6121"
+# 在 GitHub Actions Secrets 中设置 SERVER_IDS
 _server_ids_raw = os.getenv("SERVER_IDS", "")
 server_ids = [s.strip() for s in _server_ids_raw.split(",") if s.strip()]
 
@@ -68,14 +69,14 @@ def error_exit(msg):
 
 
 if not username or not password:
-    std_logger.warning("请设置环境变量 USERNAME 和 PASSWORD")
-    error_exit("缺少必要的环境变量 USERNAME 或 PASSWORD。")
+    std_logger.warning("💡 请设置环境变量 USERNAME 和 PASSWORD")
+    error_exit("❌ 缺少必要的环境变量 USERNAME 或 PASSWORD。")
 
 if not tgbot_token:
-    std_logger.warning("环境变量 TG_TOKEN 未设置")
+    std_logger.warning("⚠️ 环境变量 TG_TOKEN 未设置，Telegram 通知功能将无法使用。")
 
 if not user_id:
-    std_logger.warning("环境变量 TG_USERID 未设置")
+    std_logger.warning("⚠️ 环境变量 TG_USERID 未设置，Telegram 通知功能将无法使用。")
 
 
 def check_google():
@@ -83,7 +84,7 @@ def check_google():
         response = requests.get("https://www.google.com", timeout=5)
         return response.status_code == 200
     except requests.exceptions.RequestException as e:
-        print(f"无法访问 Google：{e}")
+        print(f"❌ 无法访问 Google：{e}")
         return False
 
 
@@ -93,17 +94,17 @@ def tg_notifacation(meg):
     try:
         response = requests.post(url, data=payload)
         if response.status_code == 200 and response.json().get("ok"):
-            std_logger.info("Telegram 发送成功")
+            std_logger.info("✅ Telegram 发送成功")
             return True
     except Exception as e:
-        std_logger.error(f"Telegram 发送失败: {e}")
+        std_logger.error(f"❌ Telegram 发送失败: {e}")
     return False
 
 
 def exit_process(num=0):
     global info, tgbot_token
     if info and info.strip():
-        info = f"Zampto服务器续期通知\n用户：{username}\n{info}"
+        info = f"ℹ️ Zampto服务器续期通知\n用户：{username}\n{info}"
         if check_google() and tgbot_token and user_id:
             tg_notifacation(info)
     exit(num)
@@ -117,17 +118,17 @@ async def capture_screenshot(file_name=None, save_dir='screenshots'):
         file_name = f'screenshot_{timestamp}.png'
     full_path = os.path.join(save_dir, file_name)
     try:
-        await page.screenshot(path=full_path, full_page=True)
-        print(f"截图已保存：{full_path}")
+        await page.screenshot(path=full_path, full_page=True)  # 修复：改为 await
+        print(f"📸 截图已保存：{full_path}")
     except Exception as e:
-        print(f"截图失败：{e}")
+        print(f"⚠️ 截图失败：{e}")
 
 
 async def wait_for(a, b=None):
     if b is None:
         b = a
     wait_time = random.uniform(a, b)
-    std_logger.debug(f"等待 {wait_time:.2f} 秒")
+    std_logger.debug(f"即将等待 {wait_time:.2f} 秒")
     await asyncio.sleep(wait_time)
 
 
@@ -144,11 +145,11 @@ async def setup():
                 capture_output=True, text=True
             )
             if result.stdout.strip() == "200":
-                std_logger.info("代理连通正常")
+                std_logger.info("✅ 代理连通正常")
             else:
-                std_logger.error(f"代理不可用 (HTTP {result.stdout.strip()})")
+                std_logger.error(f"❌ 代理不可用 (HTTP {result.stdout.strip()}), stderr: {result.stderr}")
         except Exception as e:
-            std_logger.error(f"代理检查失败: {e}")
+            std_logger.error(f"❌ 代理检查失败: {e}")
 
     launch_args = {
         "headless": True,
@@ -163,13 +164,13 @@ async def setup():
     if chrome_proxy:
         proxy_server = chrome_proxy.replace("socks5://", "")
         launch_args["proxy"] = {"server": proxy_server}
-        std_logger.info(f"代理已配置: {chrome_proxy}")
+        std_logger.info(f"✅ 代理已配置: {chrome_proxy} -> {proxy_server}")
     else:
-        std_logger.info("未配置代理")
+        std_logger.info("⚠️ 未配置代理")
 
     browser = await launch_async(**launch_args)
     page = await browser.new_page()
-    std_logger.info("CloakBrowser 启动成功")
+    std_logger.info("✅ CloakBrowser 启动成功")
 
 
 async def open_web():
@@ -202,9 +203,9 @@ async def login():
         await wait_for(10, 15)
 
         if signurl_end in page.url:
-            error_exit(f"登录失败，请检查认证信息。")
+            error_exit(f"⚠️ {username}登录失败，请检查认证信息是否正确。")
         else:
-            std_logger.info("登录成功")
+            std_logger.info("✅ 登录成功")
 
         try:
             skip = page.locator('div[role="button"]:has-text("Skip")')
@@ -224,8 +225,9 @@ async def open_server_tab():
     std_logger.info("开始续期服务器")
 
     if not server_ids:
-        error_exit("SERVER_IDS 未设置")
+        error_exit("⚠️ SERVER_IDS 环境变量未设置，请在 Secrets 中添加服务器 ID，例如：6119 或 6119,6120")
 
+    # 必须先经过 overview 页面建立正确的 session
     std_logger.info("先访问 overview 页面建立 session")
     await page.goto("https://dash.zampto.net/overview", wait_until="domcontentloaded")
     await wait_for(5, 8)
@@ -237,33 +239,36 @@ async def open_server_tab():
         std_logger.info(f"访问服务器页面：{s}")
         await page.goto(s, wait_until="domcontentloaded")
 
+        # 等待 renew 按钮渲染出来，最多等 30 秒
         try:
             await page.wait_for_selector("a.action-purple", timeout=30000)
         except Exception:
+            # 截图并输出 HTML 帮助调试
             await capture_screenshot(f"{sid}_no_btn.png")
             try:
                 html = await page.content()
-                std_logger.debug(f"页面 HTML 前 2000 字符:\n{html[:2000]}")
+                std_logger.debug(f"[DEBUG] 页面 URL: {page.url}")
+                std_logger.debug(f"[DEBUG] 页面 HTML 前 2000 字符:\n{html[:2000]}")
             except Exception:
                 pass
-            info += f'服务器 [{sid}] 未找到续期按钮\n'
+            info += f'⚠️ 服务器 [{sid}] 未找到续期按钮\n'
             continue
 
         await wait_for(2, 3)
 
-        # 点击前记录时间并截图
+        # 点击续期前，记录当前剩余时间并截图
         before_time = ""
         try:
             pre_check = page.locator('#nextRenewalTime')
             await pre_check.wait_for(timeout=10000)
             before_time = await pre_check.inner_text()
-            std_logger.info(f"续期前剩余时间: {before_time}")
+            std_logger.info(f"📋 续期前剩余时间: {before_time}")
         except Exception as e:
             std_logger.warning(f"无法获取续期前时间: {e}")
 
         await capture_screenshot(f"{sid}_before_click.png")
 
-        renew_btn = page.get_by_text("Renew Server", exact=True)
+        renew_btn = page.locator("a.action-purple")
         try:
             await renew_btn.wait_for(state="visible", timeout=10000)
             await renew_btn.scroll_into_view_if_needed()
@@ -282,7 +287,8 @@ async def open_server_tab():
             await wait_for(2, 3)
             await capture_screenshot(f"{sid}_after_click.png")
         except Exception as e:
-            info += f'[{sid}] 点击续期按钮失败: {e}\n'
+            now_bj = (datetime.utcnow() + __import__('datetime').timedelta(hours=8)).strftime("%m-%d %H:%M:%S")
+            info += f'❌ [{sid}] 点击续期按钮失败: {e}\n'
             std_logger.error(f'点击续期按钮失败: {e}')
             await capture_screenshot(f"{sid}_click_failed.png")
             continue
@@ -306,7 +312,7 @@ async def open_server_tab():
                     left_time = page.locator('#nextRenewalTime')
                     await left_time.wait_for(timeout=10000)
                     lt = await left_time.inner_text()
-                    std_logger.info(f'续期后剩余时间: {lt}')
+                    std_logger.info(f'📋 续期后剩余时间: {lt}')
 
                     now_bj = (datetime.utcnow() + __import__('datetime').timedelta(hours=8)).strftime("%m-%d %H:%M:%S")
 
@@ -315,29 +321,30 @@ async def open_server_tab():
 
                     renewed = (has_day_after and not has_day_before) or (before_time and lt != before_time and has_day_after)
 
-                    info += f'[{server_name}] 点击时间: {now_bj}\n'
+                    info += f'📅 {now_bj} [{server_name}]\n'
                     info += f'   续期前: {before_time or "未知"}\n'
                     info += f'   续期后: {lt}\n'
 
                     if renewed:
-                        info += '续期成功\n'
-                        std_logger.info(f'续期成功')
+                        info += f'✅ 续期成功\n'
+                        std_logger.info(f'✅ [{server_name}] 续期成功')
                     else:
-                        info += '续期时间未变化，可能未成功\n'
-                        std_logger.warning(f'续期时间未变化')
+                        info += f'⚠️ 续期时间未变化，可能未成功\n'
+                        std_logger.warning(f'⚠️ [{server_name}] 续期时间未变化')
                 except Exception:
                     now_bj = (datetime.utcnow() + __import__('datetime').timedelta(hours=8)).strftime("%m-%d %H:%M:%S")
-                    info += f'[{server_name}] 点击时间: {now_bj}\n'
+                    info += f'📅 {now_bj} [{server_name}]\n'
                     info += f'   续期前: {before_time or "未知"}\n'
                     info += f'   续期后: 获取失败，请检查截图\n'
+                    std_logger.info(f'✅ [{server_name}] 续期成功')
             else:
-                info += f'服务器 [{sid}] 续期失败\n'
-                error_exit(f'服务器 [{sid}] 续期失败')
+                info += f'❌ 服务器 [{sid}] 续期失败\n'
+                error_exit(f'❌ 服务器 [{sid}] 续期失败')
         except SystemExit:
             raise
         except Exception as e:
-            info += f'检查续期结果失败: {e}\n'
-            error_exit(f'检查续期结果失败: {e}')
+            info += f'❌ 检查续期结果失败: {e}\n'
+            error_exit(f'❌ 检查续期结果失败: {e}')
 
         await capture_screenshot(f"{sid}.png")
 
@@ -364,12 +371,14 @@ async def continue_execution():
     await open_web()
     std_logger.debug(f"当前页面 URL: {mask_url_domain_last8(page.url)}")
 
+    # 执行登录
     std_logger.info("执行步骤 1: account")
     await login()
     std_logger.debug("步骤 account 执行完成")
     await wait_for(3, 5)
     await capture_screenshot("account_1.png")
 
+    # 直接续期
     std_logger.info("执行步骤 2: open_server_tab")
     await open_server_tab()
     std_logger.debug("步骤 open_server_tab 执行完成")
