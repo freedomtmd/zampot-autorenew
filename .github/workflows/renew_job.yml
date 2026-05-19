@@ -1,121 +1,111 @@
-name: Zampto Renew
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: '28 5 * * *'
+name: Zampto Renew 
+on: 
+  workflow_dispatch: 
+  schedule: 
+    - cron: '28 5 * * *' 
 
-jobs:
-  run-zampto:
-    runs-on: ubuntu-latest
-    steps:
-      - name: 拉取代码
-        uses: actions/checkout@v4
+jobs: 
+  run-zampto: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - name: 拉取代码 
+        uses: actions/checkout@v4 
 
-      - name: 检查 Secrets 是否设置
-        run: |
-          if [ -z "${{ secrets.ZAMPTO_USERNAME }}" ] || [ -z "${{ secrets.ZAMPTO_PASSWORD }}" ]; then
-            echo "❌ USERNAME 或 PASSWORD 未设置，终止执行。"
-            exit 1
-          fi
-          echo "✅ 账号信息已设置"
-
-      - name: 安装并启动 Xray
-        env:
-          VLESS_SERVER: ${{ secrets.VLESS_SERVER }}
-          VLESS_UUID: ${{ secrets.VLESS_UUID }}
-          VLESS_PUBKEY: ${{ secrets.VLESS_PUBKEY }}
-          VLESS_SHORTID: ${{ secrets.VLESS_SHORTID }}
-        run: |
-          wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-          unzip -q Xray-linux-64.zip -d xray-bin
-
-          cat > xray-config.json << 'XRAYEOF'
-          {
-            "log": { "loglevel": "warning" },
-            "inbounds": [
-              {
-                "listen": "127.0.0.1",
-                "port": 10808,
-                "protocol": "socks",
-                "settings": { "udp": true }
-              }
-            ],
-            "outbounds": [
-              {
-                "protocol": "vless",
-                "settings": {
-                  "vnext": [{
-                    "address": "$VLESS_SERVER",
-                    "port": 443,
-                    "users": [{
-                      "id": "$VLESS_UUID",
-                      "encryption": "none",
-                      "flow": ""
-                    }]
-                  }]
-                },
-                "streamSettings": {
-                  "network": "tcp",
-                  "security": "reality",
-                  "realitySettings": {
-                    "serverName": "www.icloud.com",
-                    "fingerprint": "chrome",
-                    "show": false,
-                    "publicKey": "$VLESS_PUBKEY",
-                    "shortId": "$VLESS_SHORTID",
-                    "spiderX": ""
-                  }
-                }
-              }
-            ]
-          }
-          XRAYEOF
-
-          sed -i "s/\$VLESS_SERVER/$VLESS_SERVER/g" xray-config.json
-          sed -i "s/\$VLESS_UUID/$VLESS_UUID/g" xray-config.json
-          sed -i "s/\$VLESS_PUBKEY/$VLESS_PUBKEY/g" xray-config.json
-          sed -i "s/\$VLESS_SHORTID/$VLESS_SHORTID/g" xray-config.json
-
-          chmod +x xray-bin/xray
-          nohup ./xray-bin/xray -config xray-config.json > xray.log 2>&1 &
-          sleep 5
-
-          echo "=== 检查 Xray 进程 ==="
-          ps aux | grep xray | grep -v grep || echo "❌ Xray 进程不存在"
-
-          echo "=== 测试代理连通性 ==="
-          curl --socks5-hostname 127.0.0.1:10808 -s --max-time 15 https://www.google.com -o /dev/null -w "HTTP状态: %{http_code}\n" && echo "✅ Xray 代理连通" || echo "❌ 代理不通，终止执行"
-
+      - name: 检查 Secrets 是否设置 
+        run: | 
+          if [ -z "${{ secrets.ZAMPTO_USERNAME }}" ] || [ -z "${{ secrets.ZAMPTO_PASSWORD }}" ]; then 
+            echo "❌ USERNAME 或 PASSWORD 未设置，终止执行。" 
+            exit 1 
+          fi 
+          echo "✅ 账号信息已设置" 
+      - name: 安装并启动 Xray 
+        env: 
+          VLESS_SERVER: ${{ secrets.VLESS_SERVER }} 
+          VLESS_UUID: ${{ secrets.VLESS_UUID }} 
+          VLESS_PUBKEY: ${{ secrets.VLESS_PUBKEY }} 
+          VLESS_SHORTID: ${{ secrets.VLESS_SHORTID }} 
+        run: | 
+          wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip 
+          unzip -q Xray-linux-64.zip -d xray-bin 
+          cat > xray-config.json << EOF 
+          { 
+            "log": { "loglevel": "warning" }, 
+            "inbounds": [ 
+              { 
+                "listen": "127.0.0.1", 
+                "port": 10808, 
+                "protocol": "socks", 
+                "settings": { "udp": true } 
+              } 
+            ], 
+            "outbounds": [ 
+              { 
+                "protocol": "vless", 
+                "settings": { 
+                  "vnext": [{ 
+                    "address": "${VLESS_SERVER}", 
+                    "port": 443, 
+                    "users": [{ 
+                      "id": "${VLESS_UUID}", 
+                      "encryption": "none", 
+                      "flow": "" 
+                    }] 
+                  }] 
+                }, 
+                "streamSettings": { 
+                  "network": "tcp", 
+                  "security": "reality", 
+                  "realitySettings": { 
+                    "serverName": "www.icloud.com", 
+                    "fingerprint": "chrome", 
+                    "show": false, 
+                    "publicKey": "${VLESS_PUBKEY}", 
+                    "shortId": "${VLESS_SHORTID}", 
+                    "spiderX": "" 
+                  } 
+                } 
+              } 
+            ] 
+          } 
+          EOF 
+          chmod +x xray-bin/xray 
+          nohup ./xray-bin/xray -config xray-config.json > xray.log 2>&1 & 
+          sleep 5 
+          
+          echo "=== 检查 Xray 进程 ===" 
+          ps aux | grep xray | grep -v grep || echo "❌ Xray 进程不存在" 
+          
+          echo "=== 测试代理连通性 ===" 
+          curl --socks5-hostname 127.0.0.1:10808 -s --max-time 15 https://www.google.com -o /dev/null -w "HTTP状态: %{http_code}\n" && echo "✅ Xray 代理连通" || echo "❌ 代理不通，终止执行" 
+          
           if ! curl --socks5-hostname 127.0.0.1:10808 -s --max-time 15 https://www.google.com -o /dev/null; then
             echo "❌ 代理不可用，请检查 VLESS 节点配置"
             exit 1
           fi
+      - name: 设置 Python 
+        uses: actions/setup-python@v5 
+        with: 
+          python-version: '3.11' 
 
-      - name: 设置 Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: 安装依赖 
+        run: pip install -r requirements.txt 
 
-      - name: 安装依赖
-        run: pip install -r requirements.txt
-
-      - name: 运行续期脚本
-        env:
-          ZAMPTO_USER: ${{ secrets.ZAMPTO_USERNAME }}
-          PASSWORD: ${{ secrets.ZAMPTO_PASSWORD }}
-          SERVER_IDS: ${{ secrets.SERVER_IDS }}
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          TG_USERID: ${{ secrets.TG_USERID }}
+      - name: 运行续期脚本 
+        env: 
+          ZAMPTO_USER: ${{ secrets.ZAMPTO_USERNAME }} 
+          PASSWORD: ${{ secrets.ZAMPTO_PASSWORD }} 
+          SERVER_IDS: ${{ secrets.SERVER_IDS }} 
+          TG_TOKEN: ${{ secrets.TG_TOKEN }} 
+          TG_USERID: ${{ secrets.TG_USERID }} 
           CHROME_PROXY: "socks5://127.0.0.1:10808"
-        run: |
-          echo "=== 运行前再次检查代理 ==="
+        run: | 
+          echo "=== 运行前再次检查代理 ===" 
           curl --socks5-hostname 127.0.0.1:10808 -s --max-time 10 https://www.google.com -o /dev/null && echo "✅ 代理正常" || { echo "❌ 代理断了，重启 Xray..."; nohup ./xray-bin/xray -config xray-config.json > xray2.log 2>&1 & sleep 3; }
-          python zampto_server.py -r 3
-
-      - name: 上传截图（调试用）
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshots
-          path: screenshots/
+          python zampto_server.py -r 3 
+      - name: 上传截图（调试用） 
+        if: always() 
+        uses: actions/upload-artifact@v4 
+        with: 
+          name: screenshots 
+          path: screenshots/ 
           retention-days: 3
