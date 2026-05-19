@@ -26,7 +26,7 @@ jobs:
           VLESS_PUBKEY: ${{ secrets.VLESS_PUBKEY }} 
           VLESS_SHORTID: ${{ secrets.VLESS_SHORTID }} 
         run: | 
-          wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip 
+          wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip  
           unzip -q Xray-linux-64.zip -d xray-bin 
 
           cat > xray-config.json << EOF 
@@ -81,10 +81,10 @@ jobs:
           echo "=== 测试代理连通性 ===" 
           curl --socks5-hostname 127.0.0.1:10808 -s --max-time 15 https://www.google.com -o /dev/null -w "HTTP状态: %{http_code}\n" && echo "✅ Xray 代理连通" || echo "❌ 代理不通，终止执行" 
           
-          if ! curl --socks5-hostname 127.0.0.1:10808 -s --max-time 15 https://www.google.com -o /dev/null; then
-            echo "❌ 代理不可用，请检查 VLESS 节点配置"
-            exit 1
-          fi
+          if ! curl --socks5-hostname 127.0.0.1:10808 -s --max-time 15 https://www.google.com -o /dev/null; then 
+            echo "❌ 代理不可用，请检查 VLESS 节点配置" 
+            exit 1 
+          fi 
 
       - name: 设置 Python 
         uses: actions/setup-python@v5 
@@ -101,10 +101,10 @@ jobs:
           SERVER_IDS: ${{ secrets.SERVER_IDS }} 
           TG_TOKEN: ${{ secrets.TG_TOKEN }} 
           TG_USERID: ${{ secrets.TG_USERID }} 
-          CHROME_PROXY: "socks5://127.0.0.1:10808"
+          CHROME_PROXY: "socks5://127.0.0.1:10808" 
         run: | 
           echo "=== 运行前再次检查代理 ===" 
-          curl --socks5-hostname 127.0.0.1:10808 -s --max-time 10 https://www.google.com -o /dev/null && echo "✅ 代理正常" || { echo "❌ 代理断了，重启 Xray..."; nohup ./xray-bin/xray -config xray-config.json > xray2.log 2>&1 & sleep 3; }
+          curl --socks5-hostname 127.0.0.1:10808 -s --max-time 10 https://www.google.com -o /dev/null && echo "✅ 代理正常" || { echo "❌ 代理断了，重启 Xray..."; nohup ./xray-bin/xray -config xray-config.json > xray2.log 2>&1 & sleep 3; } 
           python zampto_server.py -r 3 
 
       - name: 上传截图（调试用） 
