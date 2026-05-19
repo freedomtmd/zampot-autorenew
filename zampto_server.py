@@ -104,9 +104,22 @@ def tg_notifacation(meg):
 def exit_process(num=0):
     global info, tgbot_token
     if info and info.strip():
-        info = f"ℹ️ Zampto服务器续期通知\n用户：{username}\n{info}"
+        info = f"Zampto服务器续期通知\n用户：{username}\n{info}"
         if check_google() and tgbot_token and user_id:
             tg_notifacation(info)
+
+            import glob
+            screenshot_files = sorted(glob.glob("screenshots/*.png"))
+            for img_path in screenshot_files:
+                try:
+                    url = f"https://api.telegram.org/bot{tgbot_token}/sendPhoto"
+                    with open(img_path, 'rb') as f:
+                        files = {'photo': f}
+                        data = {'chat_id': user_id, 'caption': os.path.basename(img_path)}
+                        requests.post(url, data=data, files=files, timeout=30)
+                    std_logger.info(f"已推送截图: {img_path}")
+                except Exception as e:
+                    std_logger.error(f"推送截图失败: {e}")
     exit(num)
 
 
