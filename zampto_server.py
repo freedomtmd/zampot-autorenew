@@ -317,24 +317,35 @@ async def open_server_tab():
 
         await wait_for(2, 3)
 
-        # 关闭广告弹窗（如有）
-        try:
-            close_btn = page.locator('text=Close').first
-            if await close_btn.is_visible(timeout=3000):
-                await close_btn.click()
-                std_logger.info("✅ 已关闭广告弹窗")
-                await asyncio.sleep(1)
-        except Exception:
-            pass
-        # 兼容其他弹窗关闭按钮写法
-        for close_sel in ['button:has-text("Close")', '[aria-label="Close"]', '.modal-close', '.close']:
+        # 关闭广告弹窗（如有）——尝试多种选择器，Close 是弹窗外侧纯文本元素
+        _close_selectors = [
+            'text=Close',
+            ':text("Close")',
+            'button:has-text("Close")',
+            '[aria-label="Close"]',
+            '.modal-close',
+            '.close',
+        ]
+        for _sel in _close_selectors:
             try:
-                btn = page.locator(close_sel).first
-                if await btn.is_visible(timeout=1000):
-                    await btn.click()
-                    std_logger.info(f"✅ 已关闭弹窗（选择器: {close_sel}）")
-                    await asyncio.sleep(1)
+                _btn = page.locator(_sel).first
+                if await _btn.is_visible(timeout=2000):
+                    await _btn.click(force=True)  # force=True 忽略遮挡检测
+                    std_logger.info(f"✅ 已关闭广告弹窗（{_sel}）")
+                    await asyncio.sleep(1.5)
                     break
+            except Exception:
+                pass
+        else:
+            # 所有选择器都没匹配到，用 JS 直接隐藏弹窗容器
+            try:
+                await page.evaluate("""
+                    document.querySelectorAll(
+                        '.modal, .popup, .overlay, [class*="modal"], [class*="popup"], [class*="overlay"]'
+                    ).forEach(el => el.style.display = 'none');
+                """)
+                std_logger.info("✅ 已用 JS 隐藏弹窗容器")
+                await asyncio.sleep(1)
             except Exception:
                 pass
 
@@ -400,12 +411,10 @@ async def continue_execution():
     await login()
     std_logger.debug("步骤 account 执行完成")
     await wait_for(3, 5)
-    await capture_screenshot("account_1.png")
 
     std_logger.info("执行步骤 2: open_server_tab")
     await open_server_tab()
     std_logger.debug("步骤 open_server_tab 执行完成")
-    await capture_screenshot("open_server_tab_2.png")
 
     std_logger.info("所有步骤执行完成")
     return 0
