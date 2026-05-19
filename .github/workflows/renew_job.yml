@@ -1,4 +1,5 @@
 name: Zampto Renew
+
 on:
   workflow_dispatch:
   schedule:
@@ -14,10 +15,10 @@ jobs:
       - name: 检查 Secrets 是否设置
         run: |
           if [ -z "${{ secrets.ZAMPTO_USERNAME }}" ] || [ -z "${{ secrets.ZAMPTO_PASSWORD }}" ]; then
-            echo "❌ USERNAME 或 PASSWORD 未设置，终止执行。"
+            echo "USERNAME or PASSWORD not set"
             exit 1
           fi
-          echo "✅ 账号信息已设置"
+          echo "Account info is set"
 
       - name: 安装并启动 Xray
         env:
@@ -28,63 +29,15 @@ jobs:
         run: |
           wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
           unzip -q Xray-linux-64.zip -d xray-bin
-
-          cat > xray-config.json << EOF
-          {
-            "log": { "loglevel": "warning" },
-            "inbounds": [
-              {
-                "listen": "127.0.0.1",
-                "port": 10808,
-                "protocol": "socks",
-                "settings": { "udp": true }
-              }
-            ],
-            "outbounds": [
-              {
-                "protocol": "vless",
-                "settings": {
-                  "vnext": [{
-                    "address": "${VLESS_SERVER}",
-                    "port": 443,
-                    "users": [{
-                      "id": "${VLESS_UUID}",
-                      "encryption": "none",
-                      "flow": ""
-                    }]
-                  }]
-                },
-                "streamSettings": {
-                  "network": "tcp",
-                  "security": "reality",
-                  "realitySettings": {
-                    "serverName": "www.icloud.com",
-                    "fingerprint": "chrome",
-                    "show": false,
-                    "publicKey": "${VLESS_PUBKEY}",
-                    "shortId": "${VLESS_SHORTID}",
-                    "spiderX": ""
-                  }
-                }
-              }
-            ]
-          }
-          EOF
-
+          echo '{"log":{"loglevel":"warning"},"inbounds":[{"listen":"127.0.0.1","port":10808,"protocol":"socks","settings":{"udp":true}}],"outbounds":[{"protocol":"vless","settings":{"vnext":[{"address":"'"$VLESS_SERVER"'","port":443,"users":[{"id":"'"$VLESS_UUID"'","encryption":"none","flow":""}]}]},"streamSettings":{"network":"tcp","security":"reality","realitySettings":{"serverName":"www.icloud.com","fingerprint":"chrome","show":false,"publicKey":"'"$VLESS_PUBKEY"'","shortId":"'"$VLESS_SHORTID"'","spiderX":""}}}}]}' > xray-bin/config.json
           chmod +x xray-bin/xray
-          nohup ./xray-bin/xray -config xray-config.json > xray.log 2>&1 &
+          nohup ./xray-bin/xray -config xray-bin/config.json > xray.log 2>&1 &
           sleep 5
-
-          echo "=== 检查 Xray 进程 ==="
-          ps aux | grep xray | grep -v grep || echo "❌ Xray 进程不存在"
-
-          echo "=== 测试代理连通性 ==="
-          curl --socks5-hostname 127.0.0.1:10808 -s --max-time 15 https://www.google.com -o /dev/null -w "HTTP状态: %{http_code}\n" && echo "✅ Xray 代理连通" || echo "❌ 代理不通，终止执行"
-
-          if ! curl --socks5-hostname 127.0.0.1:10808 -s --max-time 15 https://www.google.com -o /dev/null; then
-            echo "❌ 代理不可用，请检查 VLESS 节点配置"
-            exit 1
-          fi
+          echo "=== Check Xray process ==="
+          ps aux | grep xray | grep -v grep || echo "Xray not running"
+          echo "=== Test proxy ==="
+          curl --socks5-hostname 127.0.0.1:10808 -s --max-time 15 https://www.google.com -o /dev/null -w "HTTP: %{http_code}\n" || (echo "Proxy failed" && exit 1)
+          echo "Xray proxy OK"
 
       - name: 设置 Python
         uses: actions/setup-python@v5
@@ -103,11 +56,11 @@ jobs:
           TG_USERID: ${{ secrets.TG_USERID }}
           CHROME_PROXY: "socks5://127.0.0.1:10808"
         run: |
-          echo "=== 运行前再次检查代理 ==="
-          curl --socks5-hostname 127.0.0.1:10808 -s --max-time 10 https://www.google.com -o /dev/null && echo "✅ 代理正常" || { echo "❌ 代理断了，重启 Xray..."; nohup ./xray-bin/xray -config xray-config.json > xray2.log 2>&1 & sleep 3; }
+          echo "=== Check proxy before run ==="
+          curl --socks5-hostname 127.0.0.1:10808 -s --max-time 10 https://www.google.com -o /dev/null || (echo "Proxy down, restart Xray..." && nohup ./xray-bin/xray -config xray-bin/config.json > xray2.log 2>&1 & sleep 3)
           python zampto_server.py -r 3
 
-      - name: 上传截图（调试用）
+      - name: 上传截图
         if: always()
         uses: actions/upload-artifact@v4
         with:
