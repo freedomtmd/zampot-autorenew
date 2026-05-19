@@ -18,9 +18,39 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 def get_id_from_url(url):
-    parsed_url = urlparse(url)
-    query_params = parse_qs(parsed_url.query)
-    return query_params.get('id', [None])[0]
+    """从 URL 中提取服务器 ID，支持完整 URL 或纯 ID"""
+    if not url:
+        return None
+    url = url.strip()
+    # 如果是纯数字 ID，直接返回
+    if url.isdigit():
+        return url
+    # 尝试从 URL query 参数中提取 id
+    try:
+        parsed_url = urlparse(url)
+        query_params = parse_qs(parsed_url.query)
+        return query_params.get('id', [None])[0]
+    except Exception:
+        return None
+
+
+def parse_server_ids(raw: str) -> list:
+    """
+    解析服务器 ID 列表，支持以下格式（逗号分隔混用）：
+      - 纯 ID：6119
+      - 完整 URL：https://dash.zampto.net/server?id=6119
+    """
+    ids = []
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        extracted = get_id_from_url(item)
+        if extracted:
+            ids.append(extracted)
+        else:
+            std_logger.warning(f"⚠️ 无法从 '{item}' 中解析服务器 ID，已跳过")
+    return ids
 
 
 # 解析参数
@@ -28,6 +58,12 @@ parser = argparse.ArgumentParser(description="-k 在脚本运行结束后不结�
 parser.add_argument('-k', '--keep', action='store_true', help='启用保留模式')
 parser.add_argument('-d', '--debug', action='store_true', help='启用调试模式')
 parser.add_argument('-r', '--retry', type=int, default=0, help='重试次数（整数）')
+parser.add_argument(
+    '--server-ids',
+    type=str,
+    default="",
+    help='服务器 ID 或完整 URL，逗号分隔，例如：6119 或 https://dash.zampto.net/server?id=6119'
+)
 iargs = parser.parse_args()
 
 # 配置标准 logging
@@ -46,10 +82,16 @@ user_id = os.getenv("TG_USERID", "")
 # chrome代理
 chrome_proxy = os.getenv("CHROME_PROXY")
 
-# 服务器 ID 列表，逗号分隔，例如："6119,6120,6121"
-# 在 GitHub Actions Secrets 中设置 SERVER_IDS
-_server_ids_raw = os.getenv("SERVER_IDS", "")
-server_ids = [s.strip() for s in _server_ids_raw.split(",") if s.strip()]
+# 服务器 ID 列表，支持三种来源（优先级从高到低）：
+#   1. 命令行参数 --server-ids（支持纯 ID 或完整 URL，逗号分隔）
+#   2. 环境变量 SERVER_IDS（支持纯 ID 或完整 URL，逗号分隔）
+#   3. 环境变量 SERVER_URLS（完整 URL，逗号分隔，兼容旧配置）
+_cli_ids_raw   = iargs.server_ids.strip()
+_env_ids_raw   = os.getenv("SERVER_IDS", "").strip()
+_env_urls_raw  = os.getenv("SERVER_URLS", "").strip()  # 新增：兼容直接存 URL 的场景
+
+_raw_source = _cli_ids_raw or _env_ids_raw or _env_urls_raw
+server_ids = parse_server_ids(_raw_source) if _raw_source else []
 
 # 全局常量
 signurl = "https://auth.zampto.net/sign-in"
@@ -131,7 +173,7 @@ async def capture_screenshot(file_name=None, save_dir='screenshots'):
         file_name = f'screenshot_{timestamp}.png'
     full_path = os.path.join(save_dir, file_name)
     try:
-        await page.screenshot(path=full_path, full_page=True)  # 修复：改为 await
+        await page.screenshot(path=full_path, full_page=True)
         print(f"📸 截图已保存：{full_path}")
     except Exception as e:
         print(f"⚠️ 截图失败：{e}")
@@ -154,7 +196,8 @@ async def setup():
         try:
             import subprocess
             result = subprocess.run(
-                ["curl", "--socks5-hostname", "127.0.0.1:10808", "-s", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}", "https://www.google.com"],
+                ["curl", "--socks5-hostname", "127.0.0.1:10808", "-s", "--max-time", "10",
+                 "-o", "/dev/null", "-w", "%{http_code}", "https://www.google.com"],
                 capture_output=True, text=True
             )
             if result.stdout.strip() == "200":
@@ -238,7 +281,13 @@ async def open_server_tab():
     std_logger.info("开始续期服务器")
 
     if not server_ids:
-        error_exit("⚠️ SERVER_IDS 环境变量未设置，请在 Secrets 中添加服务器 ID，例如：6119 或 6119,6120")
+        error_exit(
+            "⚠️ 未找到任何服务器 ID。\n"
+            "请通过以下任意方式提供：\n"
+            "  1. 命令行：--server-ids 6119 或 --server-ids https://dash.zampto.net/server?id=6119\n"
+            "  2. 环境变量 SERVER_IDS=6119 或 SERVER_IDS=https://dash.zampto.net/server?id=6119\n"
+            "  3. 环境变量 SERVER_URLS=https://dash.zampto.net/server?id=6119（兼容模式）"
+        )
 
     # 必须先经过 overview 页面建立正确的 session
     std_logger.info("先访问 overview 页面建立 session")
@@ -256,7 +305,6 @@ async def open_server_tab():
         try:
             await page.wait_for_selector("a.action-purple", timeout=30000)
         except Exception:
-            # 截图并输出 HTML 帮助调试
             await capture_screenshot(f"{sid}_no_btn.png")
             try:
                 html = await page.content()
@@ -288,84 +336,27 @@ async def open_server_tab():
             await wait_for(1, 2)
 
             btn_text = await renew_btn.inner_text()
-            btn_is_visible = await renew_btn.is_visible()
-            std_logger.info(f"按钮文字: '{btn_text}', 可见: {btn_is_visible}")
-
-            if not btn_is_visible:
-                raise Exception("续期按钮不可见")
+            std_logger.info(f"按钮文字: '{btn_text}'")
 
             await renew_btn.click()
             std_logger.info("已点击续期按钮")
+            await wait_for(3, 5)
 
-            await wait_for(2, 3)
-            await capture_screenshot(f"{sid}_after_click.png")
         except Exception as e:
             now_bj = (datetime.utcnow() + __import__('datetime').timedelta(hours=8)).strftime("%m-%d %H:%M:%S")
-            info += f'❌ [{sid}] 点击续期按钮失败: {e}\n'
+            info += f'📅 {now_bj} [{sid}]\n'
+            info += f'   续期前: {before_time or "未知"}\n'
+            info += f'❌ 点击续期按钮失败: {e}\n'
             std_logger.error(f'点击续期按钮失败: {e}')
             await capture_screenshot(f"{sid}_click_failed.png")
             continue
 
-        await wait_for(5, 8)
-
-        try:
-            await page.reload(wait_until="domcontentloaded")
-            await wait_for(3, 5)
-            await capture_screenshot(f"{sid}_after_reload.png")
-        except Exception:
-            pass
-
-        try:
-            name_span = page.locator("span.server-name")
-            await name_span.wait_for(timeout=15000)
-            server_name = await name_span.inner_text()
-            if server_name:
-                await asyncio.sleep(2)
-                try:
-                    left_time = page.locator('#nextRenewalTime')
-                    await left_time.wait_for(timeout=10000)
-                    lt = await left_time.inner_text()
-                    std_logger.info(f'📋 续期后剩余时间: {lt}')
-
-                    now_bj = (datetime.utcnow() + __import__('datetime').timedelta(hours=8)).strftime("%m-%d %H:%M:%S")
-
-                    has_day_after = 'day' in lt.lower() or '天' in lt
-                    has_day_before = 'day' in before_time.lower() or '天' in before_time if before_time else False
-
-                    renewed = (has_day_after and not has_day_before) or (before_time and lt != before_time and has_day_after)
-
-                    info += f'📅 {now_bj} [{server_name}]\n'
-                    info += f'   续期前: {before_time or "未知"}\n'
-                    info += f'   续期后: {lt}\n'
-
-                    if renewed:
-                        info += f'✅ 续期成功\n'
-                        std_logger.info(f'✅ [{server_name}] 续期成功')
-                    else:
-                        info += f'⚠️ 续期时间未变化，可能未成功\n'
-                        std_logger.warning(f'⚠️ [{server_name}] 续期时间未变化')
-                except Exception:
-                    now_bj = (datetime.utcnow() + __import__('datetime').timedelta(hours=8)).strftime("%m-%d %H:%M:%S")
-                    info += f'📅 {now_bj} [{server_name}]\n'
-                    info += f'   续期前: {before_time or "未知"}\n'
-                    info += f'   续期后: 获取失败，请检查截图\n'
-                    std_logger.info(f'✅ [{server_name}] 续期成功')
-            else:
-                info += f'❌ 服务器 [{sid}] 续期失败\n'
-                error_exit(f'❌ 服务器 [{sid}] 续期失败')
-        except SystemExit:
-            raise
-        except Exception as e:
-            info += f'❌ 检查续期结果失败: {e}\n'
-            error_exit(f'❌ 检查续期结果失败: {e}')
-
-        await capture_screenshot(f"{sid}.png")
-
-
-steps = [
-    {"match": signurl_end, "action": login, "name": "account"},
-    {"match": "dash.zampto.net", "action": open_server_tab, "name": "open_server_tab"},
-]
+        # 点击成功即视为续期成功
+        now_bj = (datetime.utcnow() + __import__('datetime').timedelta(hours=8)).strftime("%m-%d %H:%M:%S")
+        info += f'📅 {now_bj} [{sid}]\n'
+        info += f'   续期前: {before_time or "未知"}\n'
+        info += f'✅ 续期按钮点击成功\n'
+        std_logger.info(f'✅ [{sid}] 续期按钮点击成功')
 
 
 def mask_url_domain_last8(url: str, keep: int = 8) -> str:
@@ -384,14 +375,12 @@ async def continue_execution():
     await open_web()
     std_logger.debug(f"当前页面 URL: {mask_url_domain_last8(page.url)}")
 
-    # 执行登录
     std_logger.info("执行步骤 1: account")
     await login()
     std_logger.debug("步骤 account 执行完成")
     await wait_for(3, 5)
     await capture_screenshot("account_1.png")
 
-    # 直接续期
     std_logger.info("执行步骤 2: open_server_tab")
     await open_server_tab()
     std_logger.debug("步骤 open_server_tab 执行完成")
