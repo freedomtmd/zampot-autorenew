@@ -2,7 +2,7 @@ name: Zampto Renew
 on: 
   workflow_dispatch: 
   schedule: 
-    - cron: '10 4 * * *' 
+    - cron: '54 8 * * *' 
 
 jobs: 
   run-zampto: 
